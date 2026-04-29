@@ -1,0 +1,92 @@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" AlignItems="AlignItems.Stretch">
+            <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                <MudAvatar Color="Color.Primary" Size="Size.Large" Style="width:64px;height:64px;font-size:1.75rem;font-weight:bold;">
+                    @WineNumber
+                </MudAvatar>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Wine #@WineNumber</MudText>
+            </MudStack>
+
+            @foreach (var d in RatingDimensions.All)
+            {
+                <MudPaper Class="pa-3" Elevation="0" Outlined="true">
+                    <MudStack Spacing="1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.Wrap">
+                            <MudIcon Icon="@d.Icon" Color="Color.Primary" Size="Size.Small" />
+                            <MudText Typo="Typo.subtitle2">@d.Label</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">· @d.Subtitle</MudText>
+                        </MudStack>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="line-height:1.4;">
+                            @d.Tip
+                        </MudText>
+                        <MudRating SelectedValue="@_scores[d.Key]"
+                                   SelectedValueChanged="@(EventCallback.Factory.Create<int>(this, v => _scores[d.Key] = v))"
+                                   MaxValue="5"
+                                   Size="Size.Large"
+                                   Color="Color.Primary" />
+                    </MudStack>
+                </MudPaper>
+            }
+
+            <MudTextField @bind-Value="_notes"
+                          Label="Notes (optional)"
+                          Lines="3"
+                          MaxLength="2000"
+                          Placeholder="Anything memorable — fruit, spice, who it reminds you of..."
+                          Variant="Variant.Outlined" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public int WineNumber { get; set; }
+    [Parameter] public int InitialAroma { get; set; }
+    [Parameter] public int InitialBody { get; set; }
+    [Parameter] public int InitialFlavor { get; set; }
+    [Parameter] public int InitialSmoothness { get; set; }
+    [Parameter] public int InitialOverall { get; set; }
+    [Parameter] public string? InitialNotes { get; set; }
+
+    private readonly Dictionary<RatingDimension, int> _scores = new()
+    {
+        [RatingDimension.Aroma] = 0,
+        [RatingDimension.Body] = 0,
+        [RatingDimension.Flavor] = 0,
+        [RatingDimension.Smoothness] = 0,
+        [RatingDimension.Overall] = 0,
+    };
+    private string _notes = "";
+
+    protected override void OnParametersSet()
+    {
+        _scores[RatingDimension.Aroma] = InitialAroma;
+        _scores[RatingDimension.Body] = InitialBody;
+        _scores[RatingDimension.Flavor] = InitialFlavor;
+        _scores[RatingDimension.Smoothness] = InitialSmoothness;
+        _scores[RatingDimension.Overall] = InitialOverall;
+        _notes = InitialNotes ?? "";
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Save()
+    {
+        var result = new RatingResult(
+            _scores[RatingDimension.Aroma],
+            _scores[RatingDimension.Body],
+            _scores[RatingDimension.Flavor],
+            _scores[RatingDimension.Smoothness],
+            _scores[RatingDimension.Overall],
+            string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim());
+        MudDialog.Close(DialogResult.Ok(result));
+    }
+
+    public record RatingResult(int Aroma, int Body, int Flavor, int Smoothness, int Overall, string? Notes);
+}

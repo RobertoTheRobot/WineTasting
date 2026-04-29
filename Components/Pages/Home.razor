@@ -1,0 +1,117 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IDbContextFactory<WineTastingDbContext> DbFactory
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Wine Tasting</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack AlignItems="AlignItems.Center" Spacing="1" Class="py-2">
+        <MudIcon Icon="@Icons.Material.Filled.WineBar" Size="Size.Large" Color="Color.Primary" />
+        <MudText Typo="Typo.h5" Align="Align.Center">Welcome to the tasting</MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
+            Pick the event and enter your name to start rating wines.
+        </MudText>
+    </MudStack>
+
+    @if (_events is null)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_events.Count == 0)
+    {
+        <MudPaper Class="pa-6 d-flex flex-column align-center" Elevation="0" Outlined="true">
+            <MudIcon Icon="@Icons.Material.Filled.EventBusy" Size="Size.Large" Class="mb-2" />
+            <MudText Align="Align.Center">No active events. Ask the host to set one up.</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="3">
+                <MudSelect T="Guid?" @bind-Value="_selectedEventId" Label="Event" Variant="Variant.Outlined" Required="true">
+                    @foreach (var ev in _events)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)ev.Id)">
+                            @ev.Name &nbsp;·&nbsp; @ev.Date.ToString("d MMM yyyy")
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudTextField @bind-Value="_alias"
+                              Label="Your name or alias"
+                              MaxLength="100"
+                              Variant="Variant.Outlined"
+                              Immediate="true" />
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Size="Size.Large"
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           OnClick="StartTasting"
+                           Disabled="@(!CanStart || _starting)"
+                           FullWidth="true">
+                    @if (_starting)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Start tasting
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private List<EventOption>? _events;
+    private Guid? _selectedEventId;
+    private string _alias = "";
+    private bool _starting;
+
+    private bool CanStart => _selectedEventId is not null && !string.IsNullOrWhiteSpace(_alias);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _events = await db.Events
+            .Where(e => !e.IsRevealed)
+            .OrderByDescending(e => e.Date)
+            .ThenBy(e => e.Name)
+            .Select(e => new EventOption(e.Id, e.Name, e.Date))
+            .ToListAsync();
+    }
+
+    private async Task StartTasting()
+    {
+        if (!CanStart) return;
+        _starting = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var ev = await db.Events.FirstOrDefaultAsync(e => e.Id == _selectedEventId!.Value);
+            if (ev is null || ev.IsRevealed)
+            {
+                Snackbar.Add("That event isn't accepting participants right now.", Severity.Warning);
+                return;
+            }
+
+            var p = new Participant
+            {
+                EventId = ev.Id,
+                Alias = _alias.Trim(),
+                IsFinished = false,
+            };
+            db.Participants.Add(p);
+            await db.SaveChangesAsync();
+
+            Nav.NavigateTo($"/tasting/{ev.Id}/{p.Id}");
+        }
+        finally
+        {
+            _starting = false;
+        }
+    }
+
+    private record EventOption(Guid Id, string Name, DateOnly Date);
+}

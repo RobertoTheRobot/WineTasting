@@ -1,0 +1,250 @@
+@page "/tasting/{EventId:guid}/{ParticipantId:guid}"
+@rendermode InteractiveServer
+@inject IDbContextFactory<WineTastingDbContext> DbFactory
+@inject IDialogService DialogService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Tasting · @(_event?.Name ?? "")</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_event is null || _participant is null)
+{
+    <MudAlert Severity="Severity.Error">Tasting session not found.</MudAlert>
+    <MudButton Href="/" StartIcon="@Icons.Material.Filled.Home" Class="mt-2">Back to home</MudButton>
+}
+else
+{
+    <MudStack Spacing="3">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h5">@_event.Name</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Tasting as <strong>@_participant.Alias</strong> · @_ratings.Count of @_wines.Count rated
+            </MudText>
+        </MudStack>
+
+        @if (_event.IsRevealed)
+        {
+            <MudAlert Severity="Severity.Success" Icon="@Icons.Material.Filled.Visibility">
+                Results are revealed!
+                <MudButton Variant="Variant.Text" Color="Color.Inherit" OnClick="GoToResults" Class="ml-2">View results</MudButton>
+            </MudAlert>
+        }
+        else if (_participant.IsFinished)
+        {
+            <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.HourglassTop">
+                You're finished! Waiting for the host to reveal results.
+                <MudButton Variant="Variant.Text" Color="Color.Inherit" OnClick="GoToResults" Class="ml-2">Go to results</MudButton>
+            </MudAlert>
+        }
+
+        @if (_wines.Count == 0)
+        {
+            <MudPaper Class="pa-6 d-flex flex-column align-center" Elevation="0" Outlined="true">
+                <MudIcon Icon="@Icons.Material.Filled.WineBar" Size="Size.Large" Class="mb-2" />
+                <MudText Align="Align.Center">The host hasn't added any wines yet.</MudText>
+            </MudPaper>
+        }
+        else
+        {
+            @if (!_event.IsRevealed && !_participant.IsFinished)
+            {
+                <MudExpansionPanels Elevation="0" Dense="true">
+                    <MudExpansionPanel>
+                        <TitleContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Lightbulb" Color="Color.Warning" Size="Size.Small" />
+                                <MudText Typo="Typo.subtitle2">How to rate (tap for tips)</MudText>
+                            </MudStack>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudStack Spacing="2">
+                                @foreach (var d in RatingDimensions.All)
+                                {
+                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
+                                        <MudIcon Icon="@d.Icon" Color="Color.Primary" Size="Size.Small" Class="mt-1" />
+                                        <MudStack Spacing="0" Style="min-width:0;">
+                                            <MudText Typo="Typo.body2"><strong>@d.Label</strong> <span style="color:var(--mud-palette-text-secondary);">· @d.Subtitle</span></MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="line-height:1.4;">@d.Tip</MudText>
+                                        </MudStack>
+                                    </MudStack>
+                                }
+                            </MudStack>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+
+            <MudGrid Spacing="2">
+                @foreach (var wine in _wines)
+                {
+                    var rating = _ratings.GetValueOrDefault(wine.Id);
+                    var rated = rating is not null;
+                    <MudItem xs="6" sm="4">
+                        <MudPaper Class="@CardClass(rated)"
+                                  Elevation="@(rated ? 3 : 1)"
+                                  @onclick="() => OpenRating(wine)"
+                                  Style="cursor:pointer;min-height:140px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:0.75rem;">
+                            <MudAvatar Color="@(rated ? Color.Primary : Color.Default)"
+                                       Variant="Variant.Filled"
+                                       Style="width:56px;height:56px;font-size:1.5rem;font-weight:bold;">
+                                @wine.Number
+                            </MudAvatar>
+                            @if (rated)
+                            {
+                                <MudRating SelectedValue="@rating!.Overall" MaxValue="5" ReadOnly="true" Size="Size.Small" Color="Color.Primary" Class="mt-2" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Overall · tap to edit</MudText>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">Not rated</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Default">Tap to rate</MudText>
+                            }
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            @if (!_participant.IsFinished && !_event.IsRevealed)
+            {
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Success"
+                           Size="Size.Large"
+                           FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.Done"
+                           OnClick="ConfirmFinish">
+                    I'm done — ratings are final
+                </MudButton>
+            }
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter] public Guid EventId { get; set; }
+    [Parameter] public Guid ParticipantId { get; set; }
+
+    private bool _loading = true;
+    private Event? _event;
+    private Participant? _participant;
+    private List<Wine> _wines = [];
+    private Dictionary<Guid, Rating> _ratings = [];
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_event is not null && _event.Id != EventId) await LoadAsync();
+        else if (_participant is not null && _participant.Id != ParticipantId) await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _event = await db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.Id == EventId);
+        _participant = await db.Participants.AsNoTracking().FirstOrDefaultAsync(p => p.Id == ParticipantId && p.EventId == EventId);
+
+        if (_event is not null && _participant is not null)
+        {
+            _wines = await db.Wines.AsNoTracking()
+                .Where(w => w.EventId == EventId)
+                .OrderBy(w => w.Number)
+                .ToListAsync();
+
+            _ratings = await db.Ratings.AsNoTracking()
+                .Where(r => r.ParticipantId == ParticipantId)
+                .ToDictionaryAsync(r => r.WineId, r => r);
+        }
+        _loading = false;
+    }
+
+    private string CardClass(bool rated) => rated ? "wine-card wine-card--rated" : "wine-card";
+
+    private async Task OpenRating(Wine wine)
+    {
+        if (_event!.IsRevealed || _participant!.IsFinished)
+        {
+            Snackbar.Add("Ratings are locked.", Severity.Info);
+            return;
+        }
+
+        var existing = _ratings.GetValueOrDefault(wine.Id);
+        var parameters = new DialogParameters
+        {
+            ["WineNumber"] = wine.Number,
+            ["InitialAroma"] = existing?.Aroma ?? 0,
+            ["InitialBody"] = existing?.Body ?? 0,
+            ["InitialFlavor"] = existing?.Flavor ?? 0,
+            ["InitialSmoothness"] = existing?.Smoothness ?? 0,
+            ["InitialOverall"] = existing?.Overall ?? 0,
+            ["InitialNotes"] = existing?.Notes,
+        };
+        var dlg = await DialogService.ShowAsync<RatingDialog>($"Wine #{wine.Number}", parameters);
+        var result = await dlg.Result;
+        if (result is { Canceled: false, Data: RatingDialog.RatingResult save })
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var tracked = await db.Ratings.FirstOrDefaultAsync(r => r.ParticipantId == ParticipantId && r.WineId == wine.Id);
+            if (tracked is null)
+            {
+                tracked = new Rating { ParticipantId = ParticipantId, WineId = wine.Id };
+                db.Ratings.Add(tracked);
+            }
+            tracked.Aroma = save.Aroma;
+            tracked.Body = save.Body;
+            tracked.Flavor = save.Flavor;
+            tracked.Smoothness = save.Smoothness;
+            tracked.Overall = save.Overall;
+            tracked.Notes = save.Notes;
+            await db.SaveChangesAsync();
+
+            _ratings[wine.Id] = new Rating
+            {
+                Id = tracked.Id,
+                ParticipantId = ParticipantId,
+                WineId = wine.Id,
+                Aroma = save.Aroma,
+                Body = save.Body,
+                Flavor = save.Flavor,
+                Smoothness = save.Smoothness,
+                Overall = save.Overall,
+                Notes = save.Notes,
+            };
+        }
+    }
+
+    private async Task ConfirmFinish()
+    {
+        var unrated = _wines.Count - _ratings.Count;
+        var msg = unrated > 0
+            ? $"You haven't rated {unrated} wine(s). Are you sure you're done? You can still come back to this page until results are revealed."
+            : "Mark your tasting as final? You can still come back until results are revealed.";
+
+        var parameters = new DialogParameters
+        {
+            ["Message"] = msg,
+            ["ConfirmText"] = "Yes, I'm done",
+            ["ConfirmColor"] = Color.Success,
+        };
+        var dlg = await DialogService.ShowAsync<WineTasting.Components.Pages.Admin.ConfirmDialog>("Finish tasting", parameters);
+        var result = await dlg.Result;
+        if (result is { Canceled: false })
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var tracked = await db.Participants.FirstOrDefaultAsync(p => p.Id == ParticipantId);
+            if (tracked is not null)
+            {
+                tracked.IsFinished = true;
+                await db.SaveChangesAsync();
+                _participant!.IsFinished = true;
+            }
+            Nav.NavigateTo($"/tasting/{EventId}/{ParticipantId}/results");
+        }
+    }
+
+    private void GoToResults() => Nav.NavigateTo($"/tasting/{EventId}/{ParticipantId}/results");
+}

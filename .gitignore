@@ -1,0 +1,23 @@
+# WineTasting runtime data when bind-mounted from compose.yaml
+# (SQLite database, uploaded wine images — DO NOT commit).
+/data/
+/uploads/
+
+# Per-deployment compose overrides (Seq URL/api key, image tag…).
+.env
+
+# Dev SQLite database before containerization.
+/App_Data/
+
+# .NET build artifacts
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Rider / Claude tooling
+.idea/
+.claude/

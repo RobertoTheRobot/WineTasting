@@ -1,0 +1,36 @@
+services:
+  winetasting:
+    image: registry.perezfaulks.com/winetasting:${WINETASTING_TAG:-latest}
+    container_name: winetasting
+    restart: unless-stopped
+
+    # The .NET SDK container publish runs as the non-root `app` user, but the
+    # bind mounts below are created root-owned by the Docker daemon, so the
+    # app can't write the SQLite db or uploaded images. Running as root
+    # sidesteps it — fine for a single-process homelab app.
+    user: "0:0"
+
+    # Container listens on 8080 (ASP.NET Core 10 default for SDK-built images).
+    # Host port 5999 matches the dev `dotnet run` profile in launchSettings.json.
+    ports:
+      - "5999:8080"
+
+    volumes:
+      # SQLite database (matches ConnectionStrings:WineTastingDb in appsettings).
+      # Container working dir is /app, so App_Data/winetasting.db → /app/App_Data.
+      - ./data:/app/App_Data
+      # Wine cover images uploaded through the admin UI.
+      - ./uploads:/app/wwwroot/uploads/wines
+
+    environment:
+      # ASP.NET Core
+      DOTNET_ENVIRONMENT: Production
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+
+      # --- Serilog → Seq (optional) ---
+      # Override the Seq sink configured in appsettings.json. Set SEQ_URL in
+      # .env to ship logs to your Seq instance; leave blank to disable Seq
+      # (the Console sink keeps writing to stdout regardless).
+      Serilog__WriteTo__1__Args__serverUrl: ${SEQ_URL:-}
+      Serilog__WriteTo__1__Args__apiKey: ${SEQ_API_KEY:-}

@@ -1,0 +1,388 @@
+@page "/tasting/{EventId:guid}/{ParticipantId:guid}/results"
+@rendermode InteractiveServer
+@inject IDbContextFactory<WineTastingDbContext> DbFactory
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Results · @(_event?.Name ?? "")</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_event is null || _participant is null)
+{
+    <MudAlert Severity="Severity.Error">Tasting session not found.</MudAlert>
+    <MudButton Href="/" StartIcon="@Icons.Material.Filled.Home" Class="mt-2">Back to home</MudButton>
+}
+else if (!_event.IsRevealed)
+{
+    <MudStack Spacing="3" AlignItems="AlignItems.Center" Class="pa-6">
+        <MudIcon Icon="@Icons.Material.Filled.HourglassTop" Size="Size.Large" Color="Color.Primary" />
+        <MudText Typo="Typo.h6" Align="Align.Center">Waiting for the host to reveal results</MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
+            @_finishedCount of @_totalParticipants participants finished.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RefreshAsync">
+            Refresh
+        </MudButton>
+        @if (_participant.IsFinished)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Edit" OnClick="UnfinishAsync">
+                I want to keep tasting
+            </MudButton>
+        }
+        else
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="GoToBoard">
+                Back to my ratings
+            </MudButton>
+        }
+    </MudStack>
+}
+else
+{
+    <MudStack Spacing="3">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h5">@_event.Name</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Results for @_participant.Alias · @_totalParticipants participant(s)
+            </MudText>
+        </MudStack>
+
+        @if (_talkingPoints.Count > 0)
+        {
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                @foreach (var tp in _talkingPoints)
+                {
+                    <MudPaper Class="pa-3" Elevation="0" Outlined="true" Style="flex:1 1 240px;min-width:0;">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@tp.Icon" Color="@tp.Color" />
+                            <MudStack Spacing="0" Style="min-width:0;">
+                                <MudText Typo="Typo.subtitle2">@tp.Title</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="word-break:break-word;">@tp.Detail</MudText>
+                            </MudStack>
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudStack>
+        }
+
+        @if (_topWine is not null)
+        {
+            <MudPaper Class="pa-4" Elevation="2" Style="background: linear-gradient(135deg, #FFF7E6 0%, #F7E7D3 100%);">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Color="Color.Warning" Size="Size.Large" />
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Top wine</MudText>
+                        <MudText Typo="Typo.h6">#@_topWine.Wine.Number — @_topWine.Wine.Name</MudText>
+                        <MudText Typo="Typo.caption">
+                            Overall @_topWine.GroupAverages[RatingDimension.Overall].ToString("0.0") / 5 ★
+                            (@_topWine.VoteCount vote@(_topWine.VoteCount == 1 ? "" : "s"))
+                        </MudText>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
+
+        @foreach (var w in _wineResults)
+        {
+            <MudCard Elevation="1">
+                @if (!string.IsNullOrWhiteSpace(w.Wine.ImagePath))
+                {
+                    <MudCardMedia Image="@w.Wine.ImagePath" Height="180" />
+                }
+                <MudCardContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                        <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Style="font-weight:bold;">
+                            @w.Wine.Number
+                        </MudAvatar>
+                        <MudStack Spacing="0" Style="flex:1;min-width:0;">
+                            <MudText Typo="Typo.h6" Style="word-break:break-word;">@w.Wine.Name</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @w.Wine.Type @(string.IsNullOrWhiteSpace(w.Wine.Origin) ? "" : "· " + w.Wine.Origin)
+                            </MudText>
+                        </MudStack>
+                    </MudStack>
+
+                    @if (!string.IsNullOrWhiteSpace(w.Wine.Description))
+                    {
+                        <MudText Typo="Typo.body2" Class="mb-2" Style="white-space:pre-wrap;">@w.Wine.Description</MudText>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(w.Wine.Characteristics))
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Style="white-space:pre-wrap;">@w.Wine.Characteristics</MudText>
+                    }
+
+                    <MudDivider Class="my-3" />
+
+                    @if (w.YourRating is null && w.VoteCount == 0)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No ratings yet.</MudText>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" Spacing="0" Class="mb-1" Style="padding-left:24px;">
+                            <div style="flex:1;"></div>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="width:120px;text-align:center;">You</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="width:96px;text-align:right;">Group</MudText>
+                        </MudStack>
+                        <MudStack Spacing="2">
+                            @foreach (var d in RatingDimensions.All)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Style="flex:1;min-width:0;">
+                                        <MudIcon Icon="@d.Icon" Color="Color.Primary" Size="Size.Small" />
+                                        <MudText Typo="Typo.body2" Style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">@d.Label</MudText>
+                                    </MudStack>
+                                    <div style="width:120px;display:flex;justify-content:center;">
+                                        @if (w.YourRating is not null)
+                                        {
+                                            <MudRating SelectedValue="@w.YourRating.Get(d.Key)" MaxValue="5" ReadOnly="true" Size="Size.Small" Color="Color.Primary" />
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">—</MudText>
+                                        }
+                                    </div>
+                                    <MudStack Spacing="0" AlignItems="AlignItems.End" Style="width:96px;">
+                                        @if (w.VoteCount > 0)
+                                        {
+                                            var avg = w.GroupAverages[d.Key];
+                                            <MudText Typo="Typo.body2" Style="font-weight:500;">@avg.ToString("0.0")</MudText>
+                                            @if (w.YourRating is not null)
+                                            {
+                                                var delta = w.YourRating.Get(d.Key) - avg;
+                                                var sign = delta >= 0 ? "+" : "";
+                                                var deltaColor = Math.Abs(delta) < 0.5 ? "var(--mud-palette-text-secondary)"
+                                                    : (delta > 0 ? "var(--mud-palette-success)" : "var(--mud-palette-warning)");
+                                                <MudText Typo="Typo.caption" Style="@($"color:{deltaColor};")">
+                                                    @($"You {sign}{delta:0.0}")
+                                                </MudText>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">—</MudText>
+                                        }
+                                    </MudStack>
+                                </MudStack>
+                            }
+                        </MudStack>
+
+                        @if (w.YourRating is not null && !string.IsNullOrWhiteSpace(w.YourRating.Notes))
+                        {
+                            <MudPaper Class="pa-2 mt-3" Elevation="0" Outlined="true">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Your notes</MudText>
+                                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@w.YourRating.Notes</MudText>
+                            </MudPaper>
+                        }
+                    }
+
+                    @if (w.VoteCount > 0)
+                    {
+                        <MudButton OnClick="@(() => ToggleVotes(w.Wine.Id))"
+                                   Size="Size.Small"
+                                   Class="mt-3"
+                                   StartIcon="@(IsExpanded(w.Wine.Id) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)">
+                            @(IsExpanded(w.Wine.Id) ? "Hide votes" : $"See all votes ({w.VoteCount})")
+                        </MudButton>
+                        <MudCollapse Expanded="@IsExpanded(w.Wine.Id)">
+                            <MudStack Spacing="2" Class="mt-2">
+                                @foreach (var v in w.Votes)
+                                {
+                                    <MudPaper Class="pa-3" Elevation="0" Outlined="true"
+                                              Style="@(v.IsYou ? "border-color:var(--mud-palette-primary);background:var(--mud-palette-action-default-hover);" : "")">
+                                        <MudStack Spacing="1">
+                                            <MudText Typo="Typo.body2" Style="font-weight:500;">
+                                                @v.Alias@(v.IsYou ? " (you)" : "")
+                                            </MudText>
+                                            @foreach (var d in RatingDimensions.All)
+                                            {
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="flex:1;min-width:0;">@d.Label</MudText>
+                                                    <MudRating SelectedValue="@v.Rating.Get(d.Key)" MaxValue="5" ReadOnly="true" Size="Size.Small" Color="Color.Primary" />
+                                                </MudStack>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(v.Rating.Notes))
+                                            {
+                                                <MudText Typo="Typo.body2" Color="Color.Secondary" Style="white-space:pre-wrap;" Class="mt-1">@v.Rating.Notes</MudText>
+                                            }
+                                        </MudStack>
+                                    </MudPaper>
+                                }
+                            </MudStack>
+                        </MudCollapse>
+                    }
+                </MudCardContent>
+            </MudCard>
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter] public Guid EventId { get; set; }
+    [Parameter] public Guid ParticipantId { get; set; }
+
+    private bool _loading = true;
+    private Event? _event;
+    private Participant? _participant;
+    private int _totalParticipants;
+    private int _finishedCount;
+    private List<WineResult> _wineResults = [];
+    private WineResult? _topWine;
+    private List<TalkingPoint> _talkingPoints = [];
+    private readonly HashSet<Guid> _expandedWines = [];
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _event = await db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.Id == EventId);
+        _participant = await db.Participants.AsNoTracking().FirstOrDefaultAsync(p => p.Id == ParticipantId && p.EventId == EventId);
+
+        if (_event is null || _participant is null) { _loading = false; return; }
+
+        var participants = await db.Participants.AsNoTracking()
+            .Where(p => p.EventId == EventId)
+            .ToListAsync();
+
+        _totalParticipants = participants.Count;
+        _finishedCount = participants.Count(p => p.IsFinished);
+
+        if (_event.IsRevealed)
+        {
+            var aliasById = participants.ToDictionary(p => p.Id, p => p.Alias);
+
+            var wines = await db.Wines.AsNoTracking()
+                .Where(w => w.EventId == EventId)
+                .OrderBy(w => w.Number)
+                .ToListAsync();
+
+            var allRatings = await db.Ratings.AsNoTracking()
+                .Where(r => r.Wine!.EventId == EventId)
+                .ToListAsync();
+
+            _wineResults = wines.Select(w =>
+            {
+                var ratingsForWine = allRatings.Where(r => r.WineId == w.Id).ToList();
+                var your = ratingsForWine.FirstOrDefault(r => r.ParticipantId == ParticipantId);
+
+                var groupAverages = RatingDimensions.All.ToDictionary(
+                    d => d.Key,
+                    d => ratingsForWine.Count == 0 ? 0d : ratingsForWine.Average(r => (double)r.Get(d.Key)));
+
+                var overallAvg = groupAverages[RatingDimension.Overall];
+                var overallSpread = ratingsForWine.Count < 2
+                    ? 0d
+                    : Math.Sqrt(ratingsForWine.Average(r => (r.Overall - overallAvg) * (r.Overall - overallAvg)));
+
+                var votes = ratingsForWine
+                    .Select(r => new VoteRow(
+                        aliasById.GetValueOrDefault(r.ParticipantId, "?"),
+                        r,
+                        r.ParticipantId == ParticipantId))
+                    .OrderByDescending(v => v.Rating.Overall)
+                    .ThenBy(v => v.Alias)
+                    .ToList();
+
+                return new WineResult(w, your, groupAverages, ratingsForWine.Count, overallSpread, votes);
+            }).ToList();
+
+            _topWine = _wineResults
+                .Where(r => r.VoteCount > 0)
+                .OrderByDescending(r => r.GroupAverages[RatingDimension.Overall])
+                .ThenByDescending(r => r.VoteCount)
+                .FirstOrDefault();
+
+            _talkingPoints = ComputeTalkingPoints(_wineResults);
+        }
+
+        _loading = false;
+    }
+
+    private static List<TalkingPoint> ComputeTalkingPoints(List<WineResult> results)
+    {
+        var tps = new List<TalkingPoint>();
+        var multi = results.Where(r => r.VoteCount >= 2).ToList();
+
+        var divisive = multi.OrderByDescending(r => r.OverallSpread).ThenByDescending(r => r.VoteCount).FirstOrDefault();
+        if (divisive is not null && divisive.OverallSpread >= 1.0)
+        {
+            tps.Add(new TalkingPoint(
+                Icons.Material.Filled.LocalFireDepartment,
+                Color.Error,
+                "Most divisive",
+                $"#{divisive.Wine.Number} {divisive.Wine.Name} split the table on overall enjoyability"));
+        }
+
+        var hotTake = results
+            .Where(r => r.YourRating is not null && r.VoteCount >= 2)
+            .Select(r => (Result: r, Gap: r.YourRating!.Overall - r.GroupAverages[RatingDimension.Overall]))
+            .OrderByDescending(x => Math.Abs(x.Gap))
+            .FirstOrDefault();
+        if (hotTake.Result is not null && Math.Abs(hotTake.Gap) >= 1.0)
+        {
+            var direction = hotTake.Gap > 0 ? "higher" : "lower";
+            tps.Add(new TalkingPoint(
+                Icons.Material.Filled.RecordVoiceOver,
+                Color.Warning,
+                "Hot take",
+                $"You rated #{hotTake.Result.Wine.Number} {hotTake.Result.Wine.Name} {Math.Abs(hotTake.Gap):0.0}★ {direction} than the group overall"));
+        }
+
+        var agreed = multi.OrderBy(r => r.OverallSpread).ThenByDescending(r => r.VoteCount).FirstOrDefault();
+        if (agreed is not null
+            && (divisive is null || agreed.Wine.Id != divisive.Wine.Id)
+            && agreed.OverallSpread < 0.75)
+        {
+            tps.Add(new TalkingPoint(
+                Icons.Material.Filled.Handshake,
+                Color.Success,
+                "Everyone agreed",
+                $"#{agreed.Wine.Number} {agreed.Wine.Name} — barely any spread on overall"));
+        }
+
+        return tps;
+    }
+
+    private bool IsExpanded(Guid wineId) => _expandedWines.Contains(wineId);
+
+    private void ToggleVotes(Guid wineId)
+    {
+        if (!_expandedWines.Add(wineId)) _expandedWines.Remove(wineId);
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadAsync();
+        if (_event is not null && _event.IsRevealed)
+        {
+            Snackbar.Add("Results are in!", Severity.Success);
+        }
+    }
+
+    private async Task UnfinishAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var tracked = await db.Participants.FirstOrDefaultAsync(p => p.Id == ParticipantId);
+        if (tracked is null) return;
+        tracked.IsFinished = false;
+        await db.SaveChangesAsync();
+        Nav.NavigateTo($"/tasting/{EventId}/{ParticipantId}");
+    }
+
+    private void GoToBoard() => Nav.NavigateTo($"/tasting/{EventId}/{ParticipantId}");
+
+    private record WineResult(
+        Wine Wine,
+        Rating? YourRating,
+        Dictionary<RatingDimension, double> GroupAverages,
+        int VoteCount,
+        double OverallSpread,
+        List<VoteRow> Votes);
+    private record VoteRow(string Alias, Rating Rating, bool IsYou);
+    private record TalkingPoint(string Icon, Color Color, string Title, string Detail);
+}

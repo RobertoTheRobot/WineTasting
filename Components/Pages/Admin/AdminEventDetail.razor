@@ -1,0 +1,386 @@
+@page "/admin/events/{EventId:guid}"
+@rendermode InteractiveServer
+@inject IDbContextFactory<WineTastingDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ImageStorageService ImageStorage
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_event?.Name ?? "Event") · Admin</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_event is null)
+{
+    <MudAlert Severity="Severity.Error">Event not found.</MudAlert>
+    <MudButton Href="/admin" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mt-2">Back to events</MudButton>
+}
+else
+{
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/admin" title="Back" />
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h5">@_event.Name</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@_event.Date.ToString("dddd, d MMMM yyyy")</MudText>
+            </MudStack>
+        </MudStack>
+
+        <MudPaper Class="pa-3" Elevation="1">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.subtitle1">Reveal results</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @if (_event.IsRevealed)
+                        {
+                            <span>Results are visible to participants.</span>
+                        }
+                        else if (_participants.Count == 0)
+                        {
+                            <span>No participants yet.</span>
+                        }
+                        else if (_participants.Any(p => !p.IsFinished))
+                        {
+                            <span>@_participants.Count(p => p.IsFinished) of @_participants.Count finished — waiting for everyone.</span>
+                        }
+                        else
+                        {
+                            <span>All @_participants.Count participants finished. Ready to reveal.</span>
+                        }
+                    </MudText>
+                </MudStack>
+                @if (_event.IsRevealed)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.VisibilityOff" OnClick="HideResults">
+                        Hide
+                    </MudButton>
+                }
+                else
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Visibility"
+                               Disabled="@(!CanReveal)" OnClick="RevealResults">
+                        Reveal
+                    </MudButton>
+                }
+            </MudStack>
+        </MudPaper>
+
+        <MudTabs Outlined="true" Rounded="true">
+            <MudTabPanel Text="@($"Wines ({_wines.Count})")" Icon="@Icons.Material.Filled.WineBar">
+                <MudStack Spacing="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddWine" FullWidth="true">
+                        Add wine
+                    </MudButton>
+
+                    @if (_wines.Count == 0)
+                    {
+                        <MudText Align="Align.Center" Color="Color.Secondary" Class="pa-4">
+                            No wines yet — add the first one.
+                        </MudText>
+                    }
+                    else
+                    {
+                        @foreach (var w in _wines)
+                        {
+                            <MudPaper Class="pa-3" Elevation="1">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
+                                    <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Size="Size.Large" Style="font-weight:bold;">
+                                        @w.Number
+                                    </MudAvatar>
+                                    @if (!string.IsNullOrWhiteSpace(w.ImagePath))
+                                    {
+                                        <MudImage Src="@w.ImagePath" Style="width:64px;height:64px;object-fit:cover;border-radius:8px;" />
+                                    }
+                                    <MudStack Spacing="0" Style="flex:1;min-width:0;">
+                                        <MudText Typo="Typo.subtitle1" Style="word-break:break-word;">@w.Name</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@w.Type · @(string.IsNullOrWhiteSpace(w.Origin) ? "—" : w.Origin)</MudText>
+                                    </MudStack>
+                                    <MudStack Row="true" Spacing="0">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditWine(w)" title="Edit" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteWine(w)" title="Delete" />
+                                    </MudStack>
+                                </MudStack>
+                            </MudPaper>
+                        }
+                    }
+                </MudStack>
+            </MudTabPanel>
+
+            <MudTabPanel Text="@($"Participants ({_participants.Count})")" Icon="@Icons.Material.Filled.People">
+                @if (_participants.Count == 0)
+                {
+                    <MudText Align="Align.Center" Color="Color.Secondary" Class="pa-4">
+                        No one has joined yet. Share the home page link to invite tasters.
+                    </MudText>
+                }
+                else
+                {
+                    <MudStack Spacing="2">
+                        @foreach (var p in _participants)
+                        {
+                            <MudPaper Class="pa-3" Elevation="1">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.subtitle1">@p.Alias</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@p.RatedCount of @_wines.Count rated</MudText>
+                                    </MudStack>
+                                    @if (p.IsFinished)
+                                    {
+                                        <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.Check">Finished</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.HourglassTop">In progress</MudChip>
+                                    }
+                                </MudStack>
+                            </MudPaper>
+                        }
+                    </MudStack>
+                }
+            </MudTabPanel>
+        </MudTabs>
+
+        <MudPaper Class="pa-3" Elevation="0" Outlined="true" Style="border-color:var(--mud-palette-error);">
+            <MudStack Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Error" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle1" Color="Color.Error">Danger zone</MudText>
+                </MudStack>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Reset clears every rating and unfinishes participants — wines and aliases stay.
+                    Delete removes the event and everything in it. Both are irreversible.
+                </MudText>
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+                               StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="ResetEvent">
+                        Reset votes
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.DeleteForever" OnClick="DeleteEvent">
+                        Delete event
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public Guid EventId { get; set; }
+
+    private bool _loading = true;
+    private Event? _event;
+    private List<Wine> _wines = [];
+    private List<ParticipantRow> _participants = [];
+
+    private bool CanReveal => _participants.Count > 0 && _participants.All(p => p.IsFinished);
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _event = await db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.Id == EventId);
+        if (_event is null) { _loading = false; return; }
+
+        _wines = await db.Wines.AsNoTracking()
+            .Where(w => w.EventId == EventId)
+            .OrderBy(w => w.Number)
+            .ToListAsync();
+
+        _participants = await db.Participants.AsNoTracking()
+            .Where(p => p.EventId == EventId)
+            .OrderBy(p => p.Alias)
+            .Select(p => new ParticipantRow(p.Id, p.Alias, p.IsFinished, p.Ratings.Count))
+            .ToListAsync();
+
+        _loading = false;
+    }
+
+    private async Task AddWine()
+    {
+        var nextNumber = (_wines.Count == 0 ? 0 : _wines.Max(w => w.Number)) + 1;
+        var draft = new Wine { EventId = EventId, Number = nextNumber, Type = WineType.Red };
+        var parameters = new DialogParameters { ["Wine"] = draft };
+        var dlg = await DialogService.ShowAsync<WineEditDialog>("Add wine", parameters);
+        var result = await dlg.Result;
+        if (result is { Canceled: false, Data: WineEditDialog.SaveResult save })
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            db.Wines.Add(save.Wine);
+            await db.SaveChangesAsync();
+            Snackbar.Add($"Wine #{save.Wine.Number} added", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private async Task EditWine(Wine wine)
+    {
+        var copy = new Wine
+        {
+            Id = wine.Id,
+            EventId = wine.EventId,
+            Number = wine.Number,
+            Type = wine.Type,
+            Name = wine.Name,
+            Origin = wine.Origin,
+            Description = wine.Description,
+            Characteristics = wine.Characteristics,
+            ImagePath = wine.ImagePath,
+        };
+        var parameters = new DialogParameters { ["Wine"] = copy };
+        var dlg = await DialogService.ShowAsync<WineEditDialog>($"Edit wine #{wine.Number}", parameters);
+        var result = await dlg.Result;
+        if (result is { Canceled: false, Data: WineEditDialog.SaveResult save })
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var tracked = await db.Wines.FirstOrDefaultAsync(w => w.Id == save.Wine.Id);
+            if (tracked is null) { Snackbar.Add("Wine no longer exists", Severity.Warning); await LoadAsync(); return; }
+
+            tracked.Type = save.Wine.Type;
+            tracked.Name = save.Wine.Name;
+            tracked.Origin = save.Wine.Origin;
+            tracked.Description = save.Wine.Description;
+            tracked.Characteristics = save.Wine.Characteristics;
+            tracked.ImagePath = save.Wine.ImagePath;
+
+            await db.SaveChangesAsync();
+
+            if (!string.IsNullOrWhiteSpace(save.OldImageToDelete) && save.OldImageToDelete != tracked.ImagePath)
+            {
+                ImageStorage.DeleteWineImage(save.OldImageToDelete);
+            }
+
+            Snackbar.Add($"Wine #{tracked.Number} updated", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private async Task DeleteWine(Wine wine)
+    {
+        var parameters = new DialogParameters
+        {
+            ["Message"] = $"Delete wine #{wine.Number} \"{wine.Name}\"? This also removes any ratings already given for it.",
+            ["ConfirmText"] = "Delete",
+            ["ConfirmColor"] = Color.Error,
+        };
+        var dlg = await DialogService.ShowAsync<ConfirmDialog>("Delete wine", parameters);
+        var result = await dlg.Result;
+        if (result is { Canceled: false })
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var tracked = await db.Wines.FirstOrDefaultAsync(w => w.Id == wine.Id);
+            if (tracked is null) { await LoadAsync(); return; }
+
+            var imagePath = tracked.ImagePath;
+            db.Wines.Remove(tracked);
+            await db.SaveChangesAsync();
+
+            var remaining = await db.Wines.Where(w => w.EventId == EventId).OrderBy(w => w.Number).ToListAsync();
+            for (int i = 0; i < remaining.Count; i++)
+            {
+                var desired = i + 1;
+                if (remaining[i].Number != desired) remaining[i].Number = desired;
+            }
+            await db.SaveChangesAsync();
+
+            ImageStorage.DeleteWineImage(imagePath);
+
+            Snackbar.Add($"Wine \"{wine.Name}\" deleted", Severity.Info);
+            await LoadAsync();
+        }
+    }
+
+    private async Task RevealResults()
+    {
+        if (!CanReveal) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var tracked = await db.Events.FirstOrDefaultAsync(e => e.Id == EventId);
+        if (tracked is null) return;
+        tracked.IsRevealed = true;
+        await db.SaveChangesAsync();
+        _event!.IsRevealed = true;
+        Snackbar.Add("Results revealed!", Severity.Success);
+    }
+
+    private async Task HideResults()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var tracked = await db.Events.FirstOrDefaultAsync(e => e.Id == EventId);
+        if (tracked is null) return;
+        tracked.IsRevealed = false;
+        await db.SaveChangesAsync();
+        _event!.IsRevealed = false;
+        Snackbar.Add("Results hidden.", Severity.Info);
+    }
+
+    private async Task ResetEvent()
+    {
+        if (_event is null) return;
+        var totalRatings = _participants.Sum(p => p.RatedCount);
+        var msg = $"Reset \"{_event.Name}\"? This deletes {totalRatings} rating(s), unfinishes all {_participants.Count} participant(s), and hides results. Wines and participants are kept.";
+        var parameters = new DialogParameters
+        {
+            ["Message"] = msg,
+            ["ConfirmText"] = "Reset",
+            ["ConfirmColor"] = Color.Warning,
+        };
+        var dlg = await DialogService.ShowAsync<ConfirmDialog>("Reset event", parameters);
+        var result = await dlg.Result;
+        if (result is not { Canceled: false }) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var wineIds = await db.Wines.Where(w => w.EventId == EventId).Select(w => w.Id).ToListAsync();
+        await db.Ratings.Where(r => wineIds.Contains(r.WineId)).ExecuteDeleteAsync();
+        await db.Participants.Where(p => p.EventId == EventId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.IsFinished, false));
+        var tracked = await db.Events.FirstOrDefaultAsync(e => e.Id == EventId);
+        if (tracked is not null)
+        {
+            tracked.IsRevealed = false;
+            await db.SaveChangesAsync();
+        }
+        Snackbar.Add("Event reset. Participants can rate again.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private async Task DeleteEvent()
+    {
+        if (_event is null) return;
+        var msg = $"Delete \"{_event.Name}\" and everything in it? This removes {_wines.Count} wine(s), {_participants.Count} participant(s), and all ratings. This cannot be undone.";
+        var parameters = new DialogParameters
+        {
+            ["Message"] = msg,
+            ["ConfirmText"] = "Delete forever",
+            ["ConfirmColor"] = Color.Error,
+        };
+        var dlg = await DialogService.ShowAsync<ConfirmDialog>("Delete event", parameters);
+        var result = await dlg.Result;
+        if (result is not { Canceled: false }) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var imagePaths = await db.Wines.Where(w => w.EventId == EventId)
+            .Select(w => w.ImagePath)
+            .ToListAsync();
+
+        var tracked = await db.Events.FirstOrDefaultAsync(e => e.Id == EventId);
+        if (tracked is null) { Nav.NavigateTo("/admin"); return; }
+
+        var name = tracked.Name;
+        db.Events.Remove(tracked);
+        await db.SaveChangesAsync();
+
+        foreach (var path in imagePaths)
+        {
+            ImageStorage.DeleteWineImage(path);
+        }
+
+        Snackbar.Add($"Event \"{name}\" deleted.", Severity.Info);
+        Nav.NavigateTo("/admin");
+    }
+
+    private record ParticipantRow(Guid Id, string Alias, bool IsFinished, int RatedCount);
+}
