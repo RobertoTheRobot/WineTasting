@@ -40,31 +40,72 @@
                           Variant="Variant.Outlined"
                           HelperText="Aroma, body, tasting notes — what makes this wine special." />
 
-            <MudStack Spacing="1">
-                <MudText Typo="Typo.subtitle2">Photo</MudText>
-                @if (!string.IsNullOrWhiteSpace(Wine.ImagePath) && _pendingFile is null)
-                {
-                    <MudPaper Class="pa-2 d-flex align-center" Elevation="0" Outlined="true">
-                        <MudImage Src="@Wine.ImagePath" Alt="Wine photo" Style="max-height:120px;border-radius:8px;" Class="mr-3" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="ClearImage" title="Remove photo" />
-                    </MudPaper>
-                }
-                else if (_pendingFile is not null)
-                {
-                    <MudAlert Severity="Severity.Info" Dense="true">
-                        New photo selected: @_pendingFile.Name (@FormatBytes(_pendingFile.Size)). Will save when you click Save.
-                    </MudAlert>
-                }
-                <MudFileUpload T="IBrowserFile" FilesChanged="OnFileChanged" Accept=".jpg,.jpeg,.png,.webp,.gif" MaximumFileCount="1">
-                    <CustomContent Context="upload">
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Secondary"
-                                   StartIcon="@Icons.Material.Filled.PhotoCamera"
-                                   OnClick="@upload.OpenFilePickerAsync">
-                            @(string.IsNullOrWhiteSpace(Wine.ImagePath) ? "Choose photo" : "Replace photo")
-                        </MudButton>
-                    </CustomContent>
-                </MudFileUpload>
+            <MudStack Spacing="2">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.subtitle2">Photos</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Up to 2 vertical phone photos (e.g. Pixel 8 portrait, ~3:4) — front and back of the bottle work well.
+                    </MudText>
+                </MudStack>
+
+                <MudGrid Spacing="2">
+                    @for (var i = 1; i <= 2; i++)
+                    {
+                        var slotIndex = i;
+                        var label = $"Photo {slotIndex}";
+                        var currentPath = slotIndex == 1 ? Wine.ImagePath : Wine.ImagePath2;
+                        var pendingFile = slotIndex == 1 ? _pendingFile1 : _pendingFile2;
+                        <MudItem xs="6">
+                            <MudPaper Class="pa-2" Elevation="0" Outlined="true" Style="height:100%;">
+                                <MudStack Spacing="1" Style="height:100%;">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@label</MudText>
+
+                                    @if (!string.IsNullOrWhiteSpace(currentPath) && pendingFile is null)
+                                    {
+                                        <div style="position:relative;width:100%;aspect-ratio:3/4;border-radius:8px;overflow:hidden;background:var(--mud-palette-action-default-hover);">
+                                            <img src="@currentPath" alt="@label" style="width:100%;height:100%;object-fit:cover;display:block;" />
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                           Color="Color.Error"
+                                                           Size="Size.Small"
+                                                           Variant="Variant.Filled"
+                                                           OnClick="@(() => ClearSlot(slotIndex))"
+                                                           Style="position:absolute;top:4px;right:4px;background:rgba(255,255,255,0.85);"
+                                                           title="Remove photo" />
+                                        </div>
+                                    }
+                                    else if (pendingFile is not null)
+                                    {
+                                        <MudAlert Severity="Severity.Info" Dense="true" Class="my-0">
+                                            @pendingFile.Name (@FormatBytes(pendingFile.Size))
+                                        </MudAlert>
+                                    }
+                                    else
+                                    {
+                                        <div style="width:100%;aspect-ratio:3/4;border-radius:8px;border:1px dashed var(--mud-palette-lines-default);display:flex;align-items:center;justify-content:center;color:var(--mud-palette-text-secondary);">
+                                            <MudIcon Icon="@Icons.Material.Filled.AddPhotoAlternate" Size="Size.Large" />
+                                        </div>
+                                    }
+
+                                    <MudFileUpload T="IBrowserFile"
+                                                   FilesChanged="@(f => OnFileChanged(slotIndex, f))"
+                                                   Accept=".jpg,.jpeg,.png,.webp,.gif"
+                                                   MaximumFileCount="1">
+                                        <CustomContent Context="upload">
+                                            <MudButton Variant="Variant.Outlined"
+                                                       Color="Color.Primary"
+                                                       StartIcon="@Icons.Material.Filled.PhotoCamera"
+                                                       FullWidth="true"
+                                                       Size="Size.Small"
+                                                       OnClick="@upload.OpenFilePickerAsync">
+                                                @(string.IsNullOrWhiteSpace(currentPath) && pendingFile is null ? "Choose" : "Replace")
+                                            </MudButton>
+                                        </CustomContent>
+                                    </MudFileUpload>
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+                    }
+                </MudGrid>
             </MudStack>
         </MudStack>
     </DialogContent>
@@ -88,21 +129,49 @@
 
     [Parameter] public Wine Wine { get; set; } = default!;
 
-    private IBrowserFile? _pendingFile;
-    private bool _clearImage;
+    private IBrowserFile? _pendingFile1;
+    private IBrowserFile? _pendingFile2;
+    private bool _clearImage1;
+    private bool _clearImage2;
     private bool _saving;
 
-    private void OnFileChanged(IBrowserFile? file)
+    private string? _originalImage1;
+    private string? _originalImage2;
+
+    protected override void OnParametersSet()
     {
-        _pendingFile = file;
-        _clearImage = false;
+        _originalImage1 = Wine.ImagePath;
+        _originalImage2 = Wine.ImagePath2;
     }
 
-    private void ClearImage()
+    private void OnFileChanged(int slotIndex, IBrowserFile? file)
     {
-        _pendingFile = null;
-        _clearImage = true;
-        Wine.ImagePath = null;
+        if (slotIndex == 1)
+        {
+            _pendingFile1 = file;
+            _clearImage1 = false;
+        }
+        else
+        {
+            _pendingFile2 = file;
+            _clearImage2 = false;
+        }
+    }
+
+    private void ClearSlot(int slotIndex)
+    {
+        if (slotIndex == 1)
+        {
+            _pendingFile1 = null;
+            _clearImage1 = true;
+            Wine.ImagePath = null;
+        }
+        else
+        {
+            _pendingFile2 = null;
+            _clearImage2 = true;
+            Wine.ImagePath2 = null;
+        }
     }
 
     private void Cancel() => MudDialog.Cancel();
@@ -113,19 +182,31 @@
         _saving = true;
         try
         {
-            string? oldImage = _clearImage ? _originalImage : null;
+            var oldImagesToDelete = new List<string?>();
 
-            if (_pendingFile is not null)
+            if (_pendingFile1 is not null)
             {
-                var newPath = await ImageStorage.SaveWineImageAsync(_pendingFile);
-                if (!string.IsNullOrWhiteSpace(_originalImage))
-                {
-                    oldImage = _originalImage;
-                }
+                var newPath = await ImageStorage.SaveWineImageAsync(_pendingFile1);
+                if (!string.IsNullOrWhiteSpace(_originalImage1)) oldImagesToDelete.Add(_originalImage1);
                 Wine.ImagePath = newPath;
             }
+            else if (_clearImage1 && !string.IsNullOrWhiteSpace(_originalImage1))
+            {
+                oldImagesToDelete.Add(_originalImage1);
+            }
 
-            MudDialog.Close(DialogResult.Ok(new SaveResult(Wine, oldImage)));
+            if (_pendingFile2 is not null)
+            {
+                var newPath = await ImageStorage.SaveWineImageAsync(_pendingFile2);
+                if (!string.IsNullOrWhiteSpace(_originalImage2)) oldImagesToDelete.Add(_originalImage2);
+                Wine.ImagePath2 = newPath;
+            }
+            else if (_clearImage2 && !string.IsNullOrWhiteSpace(_originalImage2))
+            {
+                oldImagesToDelete.Add(_originalImage2);
+            }
+
+            MudDialog.Close(DialogResult.Ok(new SaveResult(Wine, oldImagesToDelete)));
         }
         catch (Exception ex)
         {
@@ -137,13 +218,6 @@
         }
     }
 
-    private string? _originalImage;
-
-    protected override void OnParametersSet()
-    {
-        _originalImage = Wine.ImagePath;
-    }
-
     private static string FormatBytes(long bytes)
     {
         if (bytes < 1024) return $"{bytes} B";
@@ -151,5 +225,5 @@
         return $"{bytes / (1024.0 * 1024.0):0.##} MB";
     }
 
-    public record SaveResult(Wine Wine, string? OldImageToDelete);
+    public record SaveResult(Wine Wine, List<string?> OldImagesToDelete);
 }

@@ -4,7 +4,7 @@ namespace WineTasting.Services;
 
 public class ImageStorageService
 {
-    private const long MaxImageBytes = 5 * 1024 * 1024;
+    private const long MaxImageBytes = 12 * 1024 * 1024;
     private static readonly string[] AllowedExtensions = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
 
     private readonly IWebHostEnvironment _env;

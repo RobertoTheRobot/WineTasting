@@ -32,6 +32,18 @@ using (var scope = app.Services.CreateScope())
     var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<WineTastingDbContext>>();
     using var db = factory.CreateDbContext();
     db.Database.EnsureCreated();
+
+    // EnsureCreated does not add new columns to existing databases, so guard the
+    // ImagePath2 column for users upgrading from the single-image schema. SQLite
+    // does not support IF NOT EXISTS on ADD COLUMN; swallow the duplicate-column error.
+    try
+    {
+        db.Database.ExecuteSqlRaw("ALTER TABLE Wines ADD COLUMN ImagePath2 TEXT NULL;");
+    }
+    catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+    {
+        // Column already present — nothing to do.
+    }
 }
 
 app.UseSerilogRequestLogging();

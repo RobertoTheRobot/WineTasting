@@ -230,6 +230,7 @@ else
             Description = wine.Description,
             Characteristics = wine.Characteristics,
             ImagePath = wine.ImagePath,
+            ImagePath2 = wine.ImagePath2,
         };
         var parameters = new DialogParameters { ["Wine"] = copy };
         var dlg = await DialogService.ShowAsync<WineEditDialog>($"Edit wine #{wine.Number}", parameters);
@@ -246,12 +247,18 @@ else
             tracked.Description = save.Wine.Description;
             tracked.Characteristics = save.Wine.Characteristics;
             tracked.ImagePath = save.Wine.ImagePath;
+            tracked.ImagePath2 = save.Wine.ImagePath2;
 
             await db.SaveChangesAsync();
 
-            if (!string.IsNullOrWhiteSpace(save.OldImageToDelete) && save.OldImageToDelete != tracked.ImagePath)
+            foreach (var oldPath in save.OldImagesToDelete)
             {
-                ImageStorage.DeleteWineImage(save.OldImageToDelete);
+                if (!string.IsNullOrWhiteSpace(oldPath)
+                    && oldPath != tracked.ImagePath
+                    && oldPath != tracked.ImagePath2)
+                {
+                    ImageStorage.DeleteWineImage(oldPath);
+                }
             }
 
             Snackbar.Add($"Wine #{tracked.Number} updated", Severity.Success);
@@ -275,7 +282,7 @@ else
             var tracked = await db.Wines.FirstOrDefaultAsync(w => w.Id == wine.Id);
             if (tracked is null) { await LoadAsync(); return; }
 
-            var imagePath = tracked.ImagePath;
+            var imagePaths = new[] { tracked.ImagePath, tracked.ImagePath2 };
             db.Wines.Remove(tracked);
             await db.SaveChangesAsync();
 
@@ -287,7 +294,10 @@ else
             }
             await db.SaveChangesAsync();
 
-            ImageStorage.DeleteWineImage(imagePath);
+            foreach (var path in imagePaths)
+            {
+                ImageStorage.DeleteWineImage(path);
+            }
 
             Snackbar.Add($"Wine \"{wine.Name}\" deleted", Severity.Info);
             await LoadAsync();
@@ -363,7 +373,7 @@ else
 
         await using var db = await DbFactory.CreateDbContextAsync();
         var imagePaths = await db.Wines.Where(w => w.EventId == EventId)
-            .Select(w => w.ImagePath)
+            .SelectMany(w => new[] { w.ImagePath, w.ImagePath2 })
             .ToListAsync();
 
         var tracked = await db.Events.FirstOrDefaultAsync(e => e.Id == EventId);

@@ -1,0 +1,71 @@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Size="Size.Large" Style="font-weight:bold;">
+                    @Wine.Number
+                </MudAvatar>
+                <MudStack Spacing="0" Style="min-width:0;">
+                    <MudText Typo="Typo.h6" Style="word-break:break-word;">@Wine.Name</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @Wine.Type @(string.IsNullOrWhiteSpace(Wine.Origin) ? "" : "· " + Wine.Origin)
+                    </MudText>
+                </MudStack>
+            </MudStack>
+
+            @{
+                var photos = new[] { Wine.ImagePath, Wine.ImagePath2 }
+                    .Where(p => !string.IsNullOrWhiteSpace(p))
+                    .ToArray();
+            }
+            @if (photos.Length > 0)
+            {
+                <div style="display:flex;flex-wrap:wrap;gap:12px;">
+                    @foreach (var path in photos)
+                    {
+                        <a href="@path"
+                           target="_blank"
+                           rel="noopener"
+                           style="flex:1 1 220px;display:block;text-decoration:none;border-radius:12px;overflow:hidden;background:var(--mud-palette-action-default-hover);">
+                            <img src="@path"
+                                 alt="@Wine.Name"
+                                 loading="lazy"
+                                 style="width:100%;aspect-ratio:3/4;object-fit:cover;display:block;" />
+                        </a>
+                    }
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                    <MudIcon Icon="@Icons.Material.Filled.ZoomIn" Size="Size.Small" Style="vertical-align:middle;" />
+                    Tap a photo to open it full-size — pinch or scroll to read the label.
+                </MudText>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Wine.Description))
+            {
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.overline" Color="Color.Secondary">Description</MudText>
+                    <MudText Typo="Typo.body1" Style="white-space:pre-wrap;">@Wine.Description</MudText>
+                </MudStack>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Wine.Characteristics))
+            {
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.overline" Color="Color.Secondary">Characteristics</MudText>
+                    <MudText Typo="Typo.body1" Style="white-space:pre-wrap;">@Wine.Characteristics</MudText>
+                </MudStack>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close" Variant="Variant.Text">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Wine Wine { get; set; } = default!;
+
+    private void Close() => MudDialog.Close();
+}

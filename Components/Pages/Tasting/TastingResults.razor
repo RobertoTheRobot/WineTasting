@@ -1,6 +1,7 @@
 @page "/tasting/{EventId:guid}/{ParticipantId:guid}/results"
 @rendermode InteractiveServer
 @inject IDbContextFactory<WineTastingDbContext> DbFactory
+@inject IDialogService DialogService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 
@@ -87,23 +88,40 @@ else
 
         @foreach (var w in _wineResults)
         {
-            <MudCard Elevation="1">
-                @if (!string.IsNullOrWhiteSpace(w.Wine.ImagePath))
-                {
-                    <MudCardMedia Image="@w.Wine.ImagePath" Height="180" />
-                }
+            var photos = new[] { w.Wine.ImagePath, w.Wine.ImagePath2 }
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .ToArray();
+            <MudCard Elevation="2" Class="wine-result-card">
                 <MudCardContent>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-                        <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Style="font-weight:bold;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                        <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Size="Size.Large" Style="font-weight:bold;">
                             @w.Wine.Number
                         </MudAvatar>
                         <MudStack Spacing="0" Style="flex:1;min-width:0;">
-                            <MudText Typo="Typo.h6" Style="word-break:break-word;">@w.Wine.Name</MudText>
+                            <MudText Typo="Typo.h6" Style="word-break:break-word;line-height:1.2;">@w.Wine.Name</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                 @w.Wine.Type @(string.IsNullOrWhiteSpace(w.Wine.Origin) ? "" : "· " + w.Wine.Origin)
                             </MudText>
                         </MudStack>
                     </MudStack>
+
+                    @if (photos.Length > 0)
+                    {
+                        <div class="wine-photo-gallery mb-3">
+                            @foreach (var path in photos)
+                            {
+                                <button type="button"
+                                        class="wine-photo-tile"
+                                        @onclick="() => OpenWineDetail(w.Wine)"
+                                        title="Tap to open photos and details">
+                                    <img src="@path" alt="@w.Wine.Name" loading="lazy" />
+                                    <span class="wine-photo-zoom">
+                                        <MudIcon Icon="@Icons.Material.Filled.ZoomIn" Size="Size.Small" />
+                                    </span>
+                                </button>
+                            }
+                        </div>
+                    }
 
                     @if (!string.IsNullOrWhiteSpace(w.Wine.Description))
                     {
@@ -112,6 +130,20 @@ else
                     @if (!string.IsNullOrWhiteSpace(w.Wine.Characteristics))
                     {
                         <MudText Typo="Typo.body2" Color="Color.Secondary" Style="white-space:pre-wrap;">@w.Wine.Characteristics</MudText>
+                    }
+
+                    @if (photos.Length > 0
+                        || !string.IsNullOrWhiteSpace(w.Wine.Description)
+                        || !string.IsNullOrWhiteSpace(w.Wine.Characteristics))
+                    {
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Primary"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.OpenInFull"
+                                   OnClick="@(() => OpenWineDetail(w.Wine))"
+                                   Class="mt-2">
+                            Open photos &amp; details
+                        </MudButton>
                     }
 
                     <MudDivider Class="my-3" />
@@ -346,6 +378,19 @@ else
         }
 
         return tps;
+    }
+
+    private async Task OpenWineDetail(Wine wine)
+    {
+        var parameters = new DialogParameters { ["Wine"] = wine };
+        var options = new DialogOptions
+        {
+            FullWidth = true,
+            MaxWidth = MaxWidth.Medium,
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+        };
+        await DialogService.ShowAsync<WineDetailDialog>($"Wine #{wine.Number}", parameters, options);
     }
 
     private bool IsExpanded(Guid wineId) => _expandedWines.Contains(wineId);

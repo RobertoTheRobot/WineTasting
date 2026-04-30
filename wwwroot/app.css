@@ -36,3 +36,57 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+.wine-result-card {
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.wine-photo-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+}
+
+.wine-photo-tile {
+    position: relative;
+    display: block;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    padding: 0;
+    border: none;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.04);
+    cursor: pointer;
+    transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.wine-photo-tile:hover,
+.wine-photo-tile:focus-visible {
+    transform: scale(1.02);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    outline: none;
+}
+
+.wine-photo-tile img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.wine-photo-tile .wine-photo-zoom {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(0, 0, 0, 0.7);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
