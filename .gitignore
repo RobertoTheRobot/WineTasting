@@ -3,6 +3,9 @@
 /data/
 /uploads/
 
+# User-uploaded wine photos served by the dev app — runtime data, not source.
+wwwroot/uploads/wines/
+
 # Per-deployment compose overrides (Seq URL/api key, image tag…).
 .env
 
@@ -12,6 +15,15 @@
 # .NET build artifacts
 [Bb]in/
 [Oo]bj/
+
+# Build/publish artifacts left in the repo root.
+*.log
+*.binlog
+*.tar.gz
+
+# Publish profiles are user-/host-specific (leak registry URLs, paths, etc).
+**/PublishProfiles/*.pubxml
+*.pubxml.user
 
 # Visual Studio
 .vs/

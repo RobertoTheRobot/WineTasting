@@ -9,6 +9,10 @@
                     <MudText Typo="Typo.h6" Style="word-break:break-word;">@Wine.Name</MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
                         @Wine.Type @(string.IsNullOrWhiteSpace(Wine.Origin) ? "" : "· " + Wine.Origin)
+                        @if (Wine.Price is { } price)
+                        {
+                            <span> · €@price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)</span>
+                        }
                     </MudText>
                 </MudStack>
             </MudStack>

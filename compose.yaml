@@ -1,6 +1,9 @@
 services:
   winetasting:
-    image: registry.perezfaulks.com/winetasting:${WINETASTING_TAG:-latest}
+    image: winetastingevent:${WINETASTING_TAG:-latest}
+    # Image is loaded from a local tarball via `docker load -i winetasting.tar.gz`.
+    # `never` prevents Compose from trying to pull from a registry.
+    pull_policy: never
     container_name: winetasting
     restart: unless-stopped
 

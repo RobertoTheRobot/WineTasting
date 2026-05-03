@@ -86,8 +86,11 @@ else
             </MudPaper>
         }
 
+        @{ var nextRank = 0; }
         @foreach (var w in _wineResults)
         {
+            if (w.VoteCount > 0) { nextRank++; }
+            var rank = nextRank; // per-iteration local — render fragments below capture this, not the outer counter
             var photos = new[] { w.Wine.ImagePath, w.Wine.ImagePath2 }
                 .Where(p => !string.IsNullOrWhiteSpace(p))
                 .ToArray();
@@ -102,6 +105,28 @@ else
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                 @w.Wine.Type @(string.IsNullOrWhiteSpace(w.Wine.Origin) ? "" : "· " + w.Wine.Origin)
                             </MudText>
+                        </MudStack>
+                        <MudStack Spacing="1" AlignItems="AlignItems.End">
+                            @if (w.VoteCount > 0)
+                            {
+                                <MudChip T="string"
+                                         Color="@RankColor(rank)"
+                                         Size="Size.Small"
+                                         Variant="Variant.Filled"
+                                         Icon="@RankIcon(rank)">
+                                    @RankLabel(rank) · @w.GroupAverages[RatingDimension.Overall].ToString("0.0")★
+                                </MudChip>
+                            }
+                            @if (w.Wine.Price is { } price)
+                            {
+                                <MudChip T="string"
+                                         Color="Color.Secondary"
+                                         Size="Size.Small"
+                                         Variant="Variant.Outlined"
+                                         Icon="@Icons.Material.Filled.EuroSymbol">
+                                    @price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
+                                </MudChip>
+                            }
                         </MudStack>
                     </MudStack>
 
@@ -144,6 +169,29 @@ else
                                    Class="mt-2">
                             Open photos &amp; details
                         </MudButton>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(w.Wine.Origin) && !string.IsNullOrWhiteSpace(w.YourRating?.GuessedOrigin))
+                    {
+                        var matched = OriginMatches(w.YourRating!.GuessedOrigin, w.Wine.Origin);
+                        <MudPaper Class="pa-2 mt-3" Elevation="0" Outlined="true"
+                                  Style="@(matched ? "border-color:var(--mud-palette-success);background:var(--mud-palette-success-lighten);" : "")">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@(matched ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                                         Color="@(matched ? Color.Success : Color.Warning)" />
+                                <MudStack Spacing="0" Style="min-width:0;">
+                                    @if (matched)
+                                    {
+                                        <MudText Typo="Typo.body2" Style="font-weight:500;">Right! You guessed @w.YourRating.GuessedOrigin.</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.body2" Style="font-weight:500;">You guessed @w.YourRating.GuessedOrigin</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">It was @w.Wine.Origin.</MudText>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
                     }
 
                     <MudDivider Class="my-3" />
@@ -236,6 +284,17 @@ else
                                                     <MudRating SelectedValue="@v.Rating.Get(d.Key)" MaxValue="5" ReadOnly="true" Size="Size.Small" Color="Color.Primary" />
                                                 </MudStack>
                                             }
+                                            @if (!string.IsNullOrWhiteSpace(v.Rating.GuessedOrigin))
+                                            {
+                                                var voterMatched = OriginMatches(v.Rating.GuessedOrigin, w.Wine.Origin);
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-1">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="flex:1;min-width:0;">Origin guess</MudText>
+                                                    <MudIcon Icon="@(voterMatched ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                                                             Color="@(voterMatched ? Color.Success : Color.Warning)"
+                                                             Size="Size.Small" />
+                                                    <MudText Typo="Typo.caption">@v.Rating.GuessedOrigin</MudText>
+                                                </MudStack>
+                                            }
                                             @if (!string.IsNullOrWhiteSpace(v.Rating.Notes))
                                             {
                                                 <MudText Typo="Typo.body2" Color="Color.Secondary" Style="white-space:pre-wrap;" Class="mt-1">@v.Rating.Notes</MudText>
@@ -321,7 +380,12 @@ else
                     .ToList();
 
                 return new WineResult(w, your, groupAverages, ratingsForWine.Count, overallSpread, votes);
-            }).ToList();
+            })
+            .OrderByDescending(r => r.VoteCount > 0)
+            .ThenByDescending(r => r.GroupAverages[RatingDimension.Overall])
+            .ThenByDescending(r => r.VoteCount)
+            .ThenBy(r => r.Wine.Number)
+            .ToList();
 
             _topWine = _wineResults
                 .Where(r => r.VoteCount > 0)
@@ -329,13 +393,13 @@ else
                 .ThenByDescending(r => r.VoteCount)
                 .FirstOrDefault();
 
-            _talkingPoints = ComputeTalkingPoints(_wineResults);
+            _talkingPoints = ComputeTalkingPoints(_wineResults, ParticipantId);
         }
 
         _loading = false;
     }
 
-    private static List<TalkingPoint> ComputeTalkingPoints(List<WineResult> results)
+    private static List<TalkingPoint> ComputeTalkingPoints(List<WineResult> results, Guid participantId)
     {
         var tps = new List<TalkingPoint>();
         var multi = results.Where(r => r.VoteCount >= 2).ToList();
@@ -348,6 +412,25 @@ else
                 Color.Error,
                 "Most divisive",
                 $"#{divisive.Wine.Number} {divisive.Wine.Name} split the table on overall enjoyability"));
+        }
+
+        // Origin guesses: count how many of your guesses matched.
+        var yourGuesses = results
+            .Where(r => r.YourRating is not null
+                && !string.IsNullOrWhiteSpace(r.YourRating.GuessedOrigin)
+                && !string.IsNullOrWhiteSpace(r.Wine.Origin))
+            .ToList();
+        if (yourGuesses.Count >= 2)
+        {
+            var right = yourGuesses.Count(r => OriginMatches(r.YourRating!.GuessedOrigin, r.Wine.Origin));
+            var (icon, color, title, detail) = right switch
+            {
+                var n when n == yourGuesses.Count => (Icons.Material.Filled.MilitaryTech, Color.Success, "Sommelier energy", $"You nailed all {yourGuesses.Count} origin guesses."),
+                var n when n * 2 >= yourGuesses.Count => (Icons.Material.Filled.EmojiEvents, Color.Primary, "Origin sleuth", $"You got {n} of {yourGuesses.Count} origins right."),
+                0 => (Icons.Material.Filled.TravelExplore, Color.Default, "Lost in translation", $"0 of {yourGuesses.Count} origins right — but the wine still tasted good."),
+                _ => (Icons.Material.Filled.Public, Color.Info, "Origin guesses", $"You got {right} of {yourGuesses.Count} origins right."),
+            };
+            tps.Add(new TalkingPoint(icon, color, title, detail));
         }
 
         var hotTake = results
@@ -377,8 +460,127 @@ else
                 $"#{agreed.Wine.Number} {agreed.Wine.Name} — barely any spread on overall"));
         }
 
+        // Price-aware talking points — only when at least 2 wines have prices.
+        var priced = results.Where(r => r.Wine.Price is > 0m).ToList();
+
+        if (priced.Count >= 2)
+        {
+            // Your taste: correlation between your overall rating and price.
+            var yourPoints = priced
+                .Where(r => r.YourRating is not null)
+                .Select(r => ((double)r.Wine.Price!.Value, (double)r.YourRating!.Overall))
+                .ToList();
+            if (yourPoints.Count >= 3)
+            {
+                var r = Pearson(yourPoints);
+                if (r >= 0.5)
+                {
+                    tps.Add(new TalkingPoint(
+                        Icons.Material.Filled.Diamond,
+                        Color.Tertiary,
+                        "Champagne taste",
+                        "Your ratings tracked the price tag — the pricier bottles won you over."));
+                }
+                else if (r <= -0.5)
+                {
+                    tps.Add(new TalkingPoint(
+                        Icons.Material.Filled.Savings,
+                        Color.Success,
+                        "Budget palate",
+                        "You rated the cheaper bottles higher — your wallet thanks you."));
+                }
+                else if (Math.Abs(r) < 0.2)
+                {
+                    tps.Add(new TalkingPoint(
+                        Icons.Material.Filled.Balance,
+                        Color.Info,
+                        "Price-blind palate",
+                        "Your ratings barely budged with price — you go on what's in the glass."));
+                }
+            }
+
+            // Best value: highest group overall per €, among voted-on priced wines.
+            var bestValue = priced
+                .Where(r => r.VoteCount > 0)
+                .Select(r => (Result: r, Score: r.GroupAverages[RatingDimension.Overall] / (double)r.Wine.Price!.Value))
+                .OrderByDescending(x => x.Score)
+                .FirstOrDefault();
+            if (bestValue.Result is not null)
+            {
+                tps.Add(new TalkingPoint(
+                    Icons.Material.Filled.Sell,
+                    Color.Success,
+                    "Best value",
+                    $"#{bestValue.Result.Wine.Number} {bestValue.Result.Wine.Name} — most stars per euro at €{bestValue.Result.Wine.Price!.Value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}"));
+            }
+
+            // Group's verdict: did the group like the priciest bottles more than the cheapest?
+            var groupRated = priced.Where(r => r.VoteCount > 0).OrderBy(r => r.Wine.Price!.Value).ToList();
+            if (groupRated.Count >= 4)
+            {
+                var third = Math.Max(1, groupRated.Count / 3);
+                var cheapAvg = groupRated.Take(third).Average(r => r.GroupAverages[RatingDimension.Overall]);
+                var pricyAvg = groupRated.TakeLast(third).Average(r => r.GroupAverages[RatingDimension.Overall]);
+                var gap = pricyAvg - cheapAvg;
+                if (Math.Abs(gap) >= 0.4)
+                {
+                    var (icon, color, detail) = gap > 0
+                        ? (Icons.Material.Filled.TrendingUp, Color.Warning,
+                            $"The group rated the priciest third {gap:0.0}★ higher than the cheapest — you get what you pay for tonight.")
+                        : (Icons.Material.Filled.TrendingDown, Color.Success,
+                            $"The group rated the cheapest third {Math.Abs(gap):0.0}★ higher than the priciest — table of bargain hunters.");
+                    tps.Add(new TalkingPoint(icon, color, "Price vs. taste", detail));
+                }
+            }
+        }
+
         return tps;
     }
+
+    private static double Pearson(List<(double X, double Y)> pts)
+    {
+        if (pts.Count < 2) return 0;
+        var mx = pts.Average(p => p.X);
+        var my = pts.Average(p => p.Y);
+        var num = pts.Sum(p => (p.X - mx) * (p.Y - my));
+        var dx = Math.Sqrt(pts.Sum(p => (p.X - mx) * (p.X - mx)));
+        var dy = Math.Sqrt(pts.Sum(p => (p.Y - my) * (p.Y - my)));
+        if (dx == 0 || dy == 0) return 0;
+        return num / (dx * dy);
+    }
+
+    private static bool OriginMatches(string? guess, string? actual)
+    {
+        if (string.IsNullOrWhiteSpace(guess) || string.IsNullOrWhiteSpace(actual)) return false;
+        var g = guess.Trim();
+        var a = actual.Trim();
+        if (Math.Min(g.Length, a.Length) < 3) return false;
+        return g.Contains(a, StringComparison.OrdinalIgnoreCase)
+            || a.Contains(g, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static Color RankColor(int rank) => rank switch
+    {
+        1 => Color.Warning,
+        2 => Color.Default,
+        3 => Color.Tertiary,
+        _ => Color.Surface,
+    };
+
+    private static string RankIcon(int rank) => rank switch
+    {
+        1 => Icons.Material.Filled.EmojiEvents,
+        2 or 3 => Icons.Material.Filled.WorkspacePremium,
+        _ => Icons.Material.Filled.Tag,
+    };
+
+    private static string RankLabel(int rank) => rank switch
+    {
+        1 => "1st",
+        2 => "2nd",
+        3 => "3rd",
+        _ => $"{rank}th",
+    };
 
     private async Task OpenWineDetail(Wine wine)
     {

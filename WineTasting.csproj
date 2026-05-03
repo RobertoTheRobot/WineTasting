@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <ContainerPublishMethod>Docker</ContainerPublishMethod>
+    <ContainerRepository>winetastingevent</ContainerRepository>
   </PropertyGroup>
 
   <ItemGroup>

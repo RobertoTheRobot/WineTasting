@@ -44,6 +44,24 @@ using (var scope = app.Services.CreateScope())
     {
         // Column already present — nothing to do.
     }
+
+    try
+    {
+        db.Database.ExecuteSqlRaw("ALTER TABLE Wines ADD COLUMN Price TEXT NULL;");
+    }
+    catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+    {
+        // Column already present — nothing to do.
+    }
+
+    try
+    {
+        db.Database.ExecuteSqlRaw("ALTER TABLE Ratings ADD COLUMN GuessedOrigin TEXT NULL;");
+    }
+    catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+    {
+        // Column already present — nothing to do.
+    }
 }
 
 app.UseSerilogRequestLogging();

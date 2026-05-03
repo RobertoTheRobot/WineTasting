@@ -95,7 +95,13 @@ else
                                     }
                                     <MudStack Spacing="0" Style="flex:1;min-width:0;">
                                         <MudText Typo="Typo.subtitle1" Style="word-break:break-word;">@w.Name</MudText>
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@w.Type · @(string.IsNullOrWhiteSpace(w.Origin) ? "—" : w.Origin)</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @w.Type · @(string.IsNullOrWhiteSpace(w.Origin) ? "—" : w.Origin)
+                                            @if (w.Price is { } price)
+                                            {
+                                                <span> · €@price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)</span>
+                                            }
+                                        </MudText>
                                     </MudStack>
                                     <MudStack Row="true" Spacing="0">
                                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditWine(w)" title="Edit" />
@@ -121,9 +127,9 @@ else
                         @foreach (var p in _participants)
                         {
                             <MudPaper Class="pa-3" Elevation="1">
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                                    <MudStack Spacing="0">
-                                        <MudText Typo="Typo.subtitle1">@p.Alias</MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2">
+                                    <MudStack Spacing="0" Style="flex:1;min-width:0;">
+                                        <MudText Typo="Typo.subtitle1" Style="word-break:break-word;">@p.Alias</MudText>
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">@p.RatedCount of @_wines.Count rated</MudText>
                                     </MudStack>
                                     @if (p.IsFinished)
@@ -134,6 +140,11 @@ else
                                     {
                                         <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.HourglassTop">In progress</MudChip>
                                     }
+                                    <MudIconButton Icon="@Icons.Material.Filled.Link"
+                                                   Size="Size.Medium"
+                                                   Color="Color.Primary"
+                                                   OnClick="() => ShareLink(p)"
+                                                   title="Share tasting link" />
                                 </MudStack>
                             </MudPaper>
                         }
@@ -231,6 +242,7 @@ else
             Characteristics = wine.Characteristics,
             ImagePath = wine.ImagePath,
             ImagePath2 = wine.ImagePath2,
+            Price = wine.Price,
         };
         var parameters = new DialogParameters { ["Wine"] = copy };
         var dlg = await DialogService.ShowAsync<WineEditDialog>($"Edit wine #{wine.Number}", parameters);
@@ -248,6 +260,7 @@ else
             tracked.Characteristics = save.Wine.Characteristics;
             tracked.ImagePath = save.Wine.ImagePath;
             tracked.ImagePath2 = save.Wine.ImagePath2;
+            tracked.Price = save.Wine.Price;
 
             await db.SaveChangesAsync();
 
@@ -302,6 +315,18 @@ else
             Snackbar.Add($"Wine \"{wine.Name}\" deleted", Severity.Info);
             await LoadAsync();
         }
+    }
+
+    private async Task ShareLink(ParticipantRow p)
+    {
+        var url = Nav.ToAbsoluteUri($"/tasting/{EventId}/{p.Id}").ToString();
+        var parameters = new DialogParameters
+        {
+            ["Url"] = url,
+            ["Alias"] = p.Alias,
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, FullWidth = true, MaxWidth = MaxWidth.ExtraSmall };
+        await DialogService.ShowAsync<ShareLinkDialog>("Tasting link", parameters, options);
     }
 
     private async Task RevealResults()

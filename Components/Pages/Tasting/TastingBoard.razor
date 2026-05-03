@@ -182,6 +182,7 @@ else
             ["InitialSmoothness"] = existing?.Smoothness ?? 0,
             ["InitialOverall"] = existing?.Overall ?? 0,
             ["InitialNotes"] = existing?.Notes,
+            ["InitialGuessedOrigin"] = existing?.GuessedOrigin,
         };
         var dlg = await DialogService.ShowAsync<RatingDialog>($"Wine #{wine.Number}", parameters);
         var result = await dlg.Result;
@@ -200,6 +201,7 @@ else
             tracked.Smoothness = save.Smoothness;
             tracked.Overall = save.Overall;
             tracked.Notes = save.Notes;
+            tracked.GuessedOrigin = save.GuessedOrigin;
             await db.SaveChangesAsync();
 
             _ratings[wine.Id] = new Rating
@@ -213,6 +215,7 @@ else
                 Smoothness = save.Smoothness,
                 Overall = save.Overall,
                 Notes = save.Notes,
+                GuessedOrigin = save.GuessedOrigin,
             };
         }
     }

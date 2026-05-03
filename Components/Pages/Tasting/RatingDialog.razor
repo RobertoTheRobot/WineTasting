@@ -29,6 +29,13 @@
                 </MudPaper>
             }
 
+            <MudTextField @bind-Value="_guessedOrigin"
+                          Label="Guess the origin (optional)"
+                          MaxLength="200"
+                          Placeholder="e.g. France, Rioja, Mendoza..."
+                          Variant="Variant.Outlined"
+                          HelperText="A region or country — we'll check at the reveal." />
+
             <MudTextField @bind-Value="_notes"
                           Label="Notes (optional)"
                           Lines="3"
@@ -53,6 +60,7 @@
     [Parameter] public int InitialSmoothness { get; set; }
     [Parameter] public int InitialOverall { get; set; }
     [Parameter] public string? InitialNotes { get; set; }
+    [Parameter] public string? InitialGuessedOrigin { get; set; }
 
     private readonly Dictionary<RatingDimension, int> _scores = new()
     {
@@ -63,6 +71,7 @@
         [RatingDimension.Overall] = 0,
     };
     private string _notes = "";
+    private string _guessedOrigin = "";
 
     protected override void OnParametersSet()
     {
@@ -72,6 +81,7 @@
         _scores[RatingDimension.Smoothness] = InitialSmoothness;
         _scores[RatingDimension.Overall] = InitialOverall;
         _notes = InitialNotes ?? "";
+        _guessedOrigin = InitialGuessedOrigin ?? "";
     }
 
     private void Cancel() => MudDialog.Cancel();
@@ -84,9 +94,10 @@
             _scores[RatingDimension.Flavor],
             _scores[RatingDimension.Smoothness],
             _scores[RatingDimension.Overall],
-            string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim());
+            string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim(),
+            string.IsNullOrWhiteSpace(_guessedOrigin) ? null : _guessedOrigin.Trim());
         MudDialog.Close(DialogResult.Ok(result));
     }
 
-    public record RatingResult(int Aroma, int Body, int Flavor, int Smoothness, int Overall, string? Notes);
+    public record RatingResult(int Aroma, int Body, int Flavor, int Smoothness, int Overall, string? Notes, string? GuessedOrigin);
 }

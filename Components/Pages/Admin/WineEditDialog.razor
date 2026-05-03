@@ -27,6 +27,19 @@
                           MaxLength="200"
                           Variant="Variant.Outlined" />
 
+            <MudNumericField T="decimal?"
+                             @bind-Value="Wine.Price"
+                             Label="Price"
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.Start"
+                             AdornmentText="€"
+                             Min="0m"
+                             Max="99999.99m"
+                             Step="0.5m"
+                             Format="0.00"
+                             Culture="@System.Globalization.CultureInfo.InvariantCulture"
+                             HelperText="Optional. Hidden from tasters until the reveal." />
+
             <MudTextField @bind-Value="Wine.Description"
                           Label="Description"
                           Lines="3"

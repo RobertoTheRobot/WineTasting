@@ -1,0 +1,49 @@
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Share this link with <strong>@Alias</strong> to resume their tasting. Anyone with the link can rate as them.
+            </MudText>
+            <MudTextField Value="@Url"
+                          T="string"
+                          Label="Tasting link"
+                          Variant="Variant.Outlined"
+                          ReadOnly="true"
+                          Lines="2" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   StartIcon="@Icons.Material.Filled.ContentCopy"
+                   OnClick="Copy">
+            Copy link
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Url { get; set; } = "";
+    [Parameter] public string Alias { get; set; } = "";
+
+    private async Task Copy()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", Url);
+            Snackbar.Add($"Link for {Alias} copied to clipboard", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Couldn't copy automatically — long-press the link to copy it.", Severity.Warning);
+        }
+    }
+
+    private void Close() => MudDialog.Close(DialogResult.Ok(true));
+}
