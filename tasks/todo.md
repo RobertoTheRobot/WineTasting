@@ -84,3 +84,7 @@ All under `/admin` route prefix, no auth, opt into `InteractiveServer` rendering
 - Reveal button is disabled until every participant `IsFinished` and there is at least one.
 
 **Manual test still recommended:** open `http://localhost:5171` in a phone-sized browser viewport, walk the full admin → 2 participants tasting → reveal flow. Image upload needs a real upload to confirm.
+
+## Backlog
+
+- [ ] Resolve `NU1903` advisory: `SQLitePCLRaw.lib.e_sqlite3` 2.1.11 has a known high-severity vulnerability (https://github.com/advisories/GHSA-2m69-gcr7-jv3q), pulled in transitively via `Microsoft.EntityFrameworkCore.Sqlite`. Bump the EF Core Sqlite package (or pin a patched `SQLitePCLRaw.*` version directly) and confirm the warning clears on `dotnet build`.
