@@ -11,6 +11,15 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.7" />
+    <!--
+      Microsoft.EntityFrameworkCore.Sqlite pins SQLitePCLRaw at 2.1.11 (still true as of its
+      latest 10.0.9 patch, checked 2026-07-11), which bundles a pre-3.50.2 SQLite build affected
+      by CVE-2025-6965 (GHSA-2m69-gcr7-jv3q, high severity memory corruption). SQLitePCLRaw's 3.x
+      line repackaged its native dependency as SourceGear.sqlite3 (version = embedded SQLite
+      version); bundle_e_sqlite3 3.0.3 pulls SourceGear.sqlite3 3.50.4.5 (SQLite 3.50.4, past the
+      fix line). Forces the transitive floor up via this direct reference.
+    -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     <PackageReference Include="MudBlazor" Version="9.4.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.Seq" Version="9.0.0" />
