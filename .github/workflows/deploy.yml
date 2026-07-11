@@ -1,0 +1,91 @@
+name: Build, test, and deploy
+
+# Runs on every merge to main (and manually via workflow_dispatch). Builds the container image,
+# pushes it to the private registry, then deploys it to nuc1 via the dedicated `deploy` user
+# (docker group, no sudo) over SSH. Modeled on HomeYarp's CD-1 pipeline — see lab-manager
+# docs/runbooks/lab-app-cicd.md for the full picture, rollback steps, and the registry-cert-
+# rotation gotcha. There are no test projects in this repo yet, so the gate is `dotnet build`.
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Deploy an existing image tag instead of building a new one (optional)"
+        required: false
+        type: string
+
+concurrency:
+  group: winetasting-deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: registry.perezfaulks.com
+  IMAGE: winetastingevent
+  NUC1_HOST: 192.168.1.2
+  APP: winetasting
+
+jobs:
+  build-test-deploy:
+    runs-on: [self-hosted, linux, x64, dotnet, docker]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: tag
+        run: |
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            echo "value=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=$(date -u +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build (gate)
+        if: ${{ !inputs.tag }}
+        run: dotnet build -c Release
+
+      # The registry's self-signed cert rotates on regeneration (mints a new keypair, no
+      # in-place renewal), so re-fetch it from the live endpoint every run instead of trusting a
+      # static copy. Installed in TWO places: Docker's certs.d (for `docker pull`) AND the OS
+      # trust store, because `dotnet publish -t:PublishContainer` pushes directly to the registry
+      # via the SDK's own HTTP registry client — it never goes through the Docker daemon, so
+      # certs.d alone isn't enough.
+      - name: Refresh registry TLS trust
+        if: ${{ !inputs.tag }}
+        run: |
+          echo | openssl s_client -connect ${NUC1_HOST}:443 -servername "${REGISTRY}" 2>/dev/null \
+            | openssl x509 > /tmp/registry-ca.crt
+          openssl x509 -in /tmp/registry-ca.crt -noout -subject -enddate
+
+          sudo install -d -m 0755 "/etc/docker/certs.d/${REGISTRY}"
+          sudo install -m 0644 /tmp/registry-ca.crt "/etc/docker/certs.d/${REGISTRY}/ca.crt"
+
+          sudo install -m 0644 /tmp/registry-ca.crt "/usr/local/share/ca-certificates/${REGISTRY}.crt"
+          sudo update-ca-certificates
+
+          rm -f /tmp/registry-ca.crt
+
+      # The csproj sets ContainerPublishMethod=Docker (local publish default, uses the Docker
+      # daemon) and ContainerRepository=winetastingevent (matches the image name already live on
+      # nuc1). Override ContainerPublishMethod to the SDK's own registry-client push here so this
+      # matches HomeYarp's pattern (no local image, no separate `docker push` needed).
+      - name: Build and push image
+        if: ${{ !inputs.tag }}
+        run: |
+          dotnet publish -c Release \
+            -t:PublishContainer \
+            -p:ContainerPublishMethod= \
+            -p:ContainerRegistry=${REGISTRY} \
+            -p:ContainerRepository=${IMAGE} \
+            -p:ContainerImageTag=${{ steps.tag.outputs.value }}
+
+      - name: Deploy to nuc1
+        run: |
+          ssh -i ~/.ssh/id_ed25519_ci_deploy -o StrictHostKeyChecking=yes \
+            deploy@${NUC1_HOST} \
+            "/srv/lab/${APP}/deploy-lab-app.sh ${APP} ${{ steps.tag.outputs.value }}"
+
+      - name: Post-deploy check
+        run: |
+          curl -sf -o /dev/null http://${NUC1_HOST}:5999/ && echo "winetasting :5999 OK"
