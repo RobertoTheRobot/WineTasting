@@ -1,6 +1,9 @@
 # WineTasting runtime data when bind-mounted from compose.yaml
 # (SQLite database, uploaded wine images — DO NOT commit).
-/data/
+# Named "runtime-data" (not "data") because Windows git checkouts match
+# .gitignore case-insensitively — a literal /data/ rule silently swallowed
+# the C# `Data/` source folder (EF models, DbContext) from every commit.
+/runtime-data/
 /uploads/
 
 # User-uploaded wine photos served by the dev app — runtime data, not source.

@@ -21,7 +21,7 @@ services:
     volumes:
       # SQLite database (matches ConnectionStrings:WineTastingDb in appsettings).
       # Container working dir is /app, so App_Data/winetasting.db → /app/App_Data.
-      - ./data:/app/App_Data
+      - ./runtime-data:/app/App_Data
       # Wine cover images uploaded through the admin UI.
       - ./uploads:/app/wwwroot/uploads/wines
 
