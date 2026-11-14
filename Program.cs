@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 using Serilog;
@@ -21,6 +22,21 @@ builder.Services.AddDbContextFactory<WineTastingDbContext>(options =>
         ?? "Data Source=App_Data/winetasting.db"));
 
 builder.Services.AddScoped<ImageStorageService>();
+
+// Reverse-proxy (HomeYarp) forwarded headers — preserve original scheme/host/IP.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
+        | ForwardedHeaders.XForwardedProto
+        | ForwardedHeaders.XForwardedHost;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// Antiforgery cookie carries Secure whenever the request is HTTPS — which is what
+// UseForwardedHeaders reports for every public request behind HomeYarp. SameAsRequest, not
+// Always: Always throws on plain-HTTP requests (local dev, the deploy smoke check on :5999).
+builder.Services.AddAntiforgery(options => options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest);
 
 var app = builder.Build();
 
@@ -63,6 +79,9 @@ using (var scope = app.Services.CreateScope())
         // Column already present — nothing to do.
     }
 }
+
+// First in the pipeline so everything after it sees the original scheme/host/IP.
+app.UseForwardedHeaders();
 
 app.UseSerilogRequestLogging();
 
